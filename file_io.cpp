@@ -804,6 +804,17 @@ int FileSave(const char *name, void *pBuffer, int size)
 		return 0;
 	}
 
+	// The exFAT driver of the MiSTer kernel does not free the clusters of a file that a
+	// rename replaces: every save would lose the old file's size of free space until the
+	// card is checked on a PC. Remove the old file first; the new data is already safe in
+	// the temp file.
+	if (unlink(full_path) && errno != ENOENT)
+	{
+		printf("FileSave error: cannot remove %s (%s).\n", full_path, strerror(errno));
+		unlink(tmp_path);
+		return 0;
+	}
+
 	if (rename(tmp_path, full_path))
 	{
 		printf("FileSave error: rename to %s failed (%s).\n", full_path, strerror(errno));
