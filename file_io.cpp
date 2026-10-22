@@ -766,63 +766,97 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 	return FileWriteAdv(file, pBuffer, 512);
 }
 
-int FileSave(const char *name, void *pBuffer, int size)
+int FileSaveBegin(FileSaveJob *job, const char *name, const void *pBuffer, int size)
 {
 	make_fullpath(name);
+	snprintf(job->path, sizeof(job->path), "%s", full_path);
+	job->buf = (const uint8_t*)pBuffer;
+	job->size = size;
+	job->done = 0;
 
 	// write a temp file and rename it over the target, so a power cut never leaves a truncated file
-	char tmp_path[sizeof(full_path) + 4];
-	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", full_path);
+	char tmp_path[sizeof(job->path) + 4];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", job->path);
 
-	int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
-	if (fd < 0)
+	job->fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (job->fd < 0)
 	{
 		printf("FileSave error: cannot open %s (%s).\n", tmp_path, strerror(errno));
 		return 0;
 	}
+	return 1;
+}
 
-	int ret = write(fd, pBuffer, size);
+void FileSaveAbort(FileSaveJob *job)
+{
+	if (job->fd < 0) return;
+	char tmp_path[sizeof(job->path) + 4];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", job->path);
+	close(job->fd);
+	unlink(tmp_path);
+	job->fd = -1;
+}
+
+int FileSaveStep(FileSaveJob *job, int max)
+{
+	char tmp_path[sizeof(job->path) + 4];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", job->path);
+
+	int len = job->size - job->done;
+	if (len > max) len = max;
+	int ret = write(job->fd, job->buf + job->done, len);
 	if (ret < 0)
 	{
 		printf("FileSave error: write to %s failed (%s).\n", tmp_path, strerror(errno));
-		close(fd);
-		unlink(tmp_path);
-		return 0;
+		FileSaveAbort(job);
+		return -1;
 	}
-	if (ret != size)
+	if (ret != len)
 	{
-		printf("FileSave error: short write to %s, wrote %d of %d bytes.\n", tmp_path, ret, size);
-		close(fd);
-		unlink(tmp_path);
-		return 0;
+		printf("FileSave error: short write to %s, wrote %d of %d bytes.\n", tmp_path, job->done + ret, job->size);
+		FileSaveAbort(job);
+		return -1;
 	}
+	job->done += len;
+	if (job->done < job->size) return 1;
 
+	int fd = job->fd;
+	job->fd = -1;
 	if (close(fd))
 	{
 		printf("FileSave error: close %s failed (%s).\n", tmp_path, strerror(errno));
 		unlink(tmp_path);
-		return 0;
+		return -1;
 	}
 
 	// The exFAT driver of the MiSTer kernel does not free the clusters of a file that a
 	// rename replaces: every save would lose the old file's size of free space until the
 	// card is checked on a PC. Remove the old file first; the new data is already safe in
 	// the temp file.
-	if (unlink(full_path) && errno != ENOENT)
+	if (unlink(job->path) && errno != ENOENT)
 	{
-		printf("FileSave error: cannot remove %s (%s).\n", full_path, strerror(errno));
+		printf("FileSave error: cannot remove %s (%s).\n", job->path, strerror(errno));
 		unlink(tmp_path);
-		return 0;
+		return -1;
 	}
 
-	if (rename(tmp_path, full_path))
+	if (rename(tmp_path, job->path))
 	{
-		printf("FileSave error: rename to %s failed (%s).\n", full_path, strerror(errno));
+		printf("FileSave error: rename to %s failed (%s).\n", job->path, strerror(errno));
 		unlink(tmp_path);
-		return 0;
+		return -1;
 	}
 
-	return ret;
+	return 0;
+}
+
+int FileSave(const char *name, void *pBuffer, int size)
+{
+	FileSaveJob job;
+	if (!FileSaveBegin(&job, name, pBuffer, size)) return 0;
+	int ret;
+	while ((ret = FileSaveStep(&job, size)) > 0);
+	return ret ? 0 : size;
 }
 
 int FileDelete(const char *name)
