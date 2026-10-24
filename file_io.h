@@ -115,8 +115,12 @@ void FileGenerateScreenshotName(const char *name, char *out_name, const char *ex
 
 int FileSave(const char *name, void *pBuffer, int size);
 // FileSave a piece at a time: FileSaveBegin (0 on error), then FileSaveStep until it
-// returns 0 (the file is in place) or -1 (error, nothing replaced). FileSaveAbort drops
-// an unfinished write.
+// returns 0 (the file is in place) or -1 (error). The data goes to <name>.tmp, which is
+// renamed over the file once complete; the old file is removed just before the rename.
+// After -1 the old file is untouched, except when the rename itself fails: the old file
+// is gone then and the new data is kept in <name>.tmp. FileSaveAbort removes the temp
+// file and leaves the old file as it was. pBuffer must stay valid and unchanged until
+// FileSaveStep returns 0 or -1, or FileSaveAbort is called.
 struct FileSaveJob
 {
 	int fd;
