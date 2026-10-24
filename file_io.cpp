@@ -840,10 +840,10 @@ int FileSaveStep(FileSaveJob *job, int max)
 		return -1;
 	}
 
+	// The old file is gone by now, so the temp file is the only complete copy: it stays.
 	if (rename(tmp_path, job->path))
 	{
-		printf("FileSave error: rename to %s failed (%s).\n", job->path, strerror(errno));
-		unlink(tmp_path);
+		printf("FileSave error: rename to %s failed (%s), the data is kept in %s.\n", job->path, strerror(errno), tmp_path);
 		return -1;
 	}
 
