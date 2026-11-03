@@ -1072,7 +1072,7 @@ static void ezfl_save(const char* name, uint8_t *buf)
 	}
 }
 
-void c64_open_file(const char* name, unsigned char index)
+void c64_open_file(const char* name, unsigned char index, char opensave)
 {
 	int slen = strlen(name);
 	if (slen > 4 && !strcasecmp(name + slen - 4, ".crt"))
@@ -1116,12 +1116,13 @@ void c64_open_file(const char* name, unsigned char index)
 				delete[] ezfl;
 				FileGenerateSavePath(name, (char*)ezfl_buf);
 				ezfl_save_name = (char *)ezfl_buf;
+				if (opensave) process_ss(name);
 				return;
 			}
 		}
 	}
 
-	user_io_file_tx(name, index);
+	user_io_file_tx(name, index, opensave);
 }
 
 void c64_save_cart(int open_menu)

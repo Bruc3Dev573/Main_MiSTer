@@ -2713,7 +2713,7 @@ void HandleUI(void)
 					}
 					else if (is_c64() || is_c128())
 					{
-						c64_open_file(selPath, idx);
+						c64_open_file(selPath, idx, opensave);
 					}
 					else if (is_atari800() || is_atari5200())
 					{
