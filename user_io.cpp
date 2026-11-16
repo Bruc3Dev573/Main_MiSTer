@@ -2345,8 +2345,10 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 			}
 			user_io_store_filename(name); // name screenshots after the loaded disk
 		}
-		// C64: savestates named after the disk in drive 8, as after an FS file load
-		if (is_c64() && !index) process_ss(name);
+		// C64: savestates named after the disk in drive 8, as after an FS file load;
+		// a disk in drive 9 names them only while drive 8 is empty (process_ss
+		// reloads the slots, so a second disk must not rename them mid-game)
+		if (is_c64() && (!index || (index == 1 && !sd_image[0].size))) process_ss(name);
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
 
